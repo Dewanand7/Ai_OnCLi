@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Assistant</title>
+
+  <!-- Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Code Highlight -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      display: flex;
+      height: 100vh;
+    }
+
+    #sidebar {
+      width: 200px;
+      background: #1e293b;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #sidebar button {
+      padding: 10px;
+      background: #334155;
+      border: none;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #header {
+      padding: 10px;
+      background: #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .msg {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 10px;
+      max-width: 70%;
+    }
+
+    .user { background: #2563eb; }
+    .ai { background: #334155; }
+
+    footer {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      background: #1e293b;
+    }
+
+    textarea {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      height: 50px;
+    }
+
+    button.send-btn {
+      width: 100px;
+      background: #22c55e;
+      border: none;
+      color: white;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="sidebar">
+  <button onclick="switchChat('chat_1')">Chat 1</button>
+  <button onclick="switchChat('chat_2')">Chat 2</button>
+  <button onclick="switchChat('chat_3')">Chat 3</button>
+</div>
+
+<div id="main">
+
+  <div id="header">
+    <div>🧠 AI Assistant</div>
+
+    <div>
+      <select id="model">
+        <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+        <option value="anthropic/claude-3-haiku">Claude Haiku</option>
+        <option value="meta-llama/llama-3-8b-instruct">Llama 3</option>
+      </select>
+
+      <span id="modelLabel" style="margin-left:10px; font-size:12px;"></span>
+    </div>
+  </div>
+
+  <div id="chat"></div>
+
+  <footer>
+    <textarea id="input" placeholder="Type..." onkeydown="handleKey(event)"></textarea>
+    <button class="send-btn" onclick="send()">Send</button>
+  </footer>
+
+</div>
+
+<script>
+let messages = [];
+let chatId = "chat_1";
+
+// 🔥 Render message
+function addMessage(text, cls) {
+  const chat = document.getElementById("chat");
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+
+  // markdown render
+  div.innerHTML = marked.parse(text);
+
+  // highlight code
+  div.querySelectorAll("pre code").forEach(block => {
+    hljs.highlightElement(block);
+  });
+
+  // copy button
+  div.querySelectorAll("pre").forEach(block => {
+    const btn = document.createElement("button");
+    btn.innerText = "Copy";
+    btn.style.float = "right";
+
+    btn.onclick = () => {
+      navigator.clipboard.writeText(block.innerText);
+    };
+
+    block.prepend(btn);
+  });
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// load history
+async function loadHistory() {
+  document.getElementById("chat").innerHTML = "";
+
+  const res = await fetch(`/history/${chatId}`);
+  const data = await res.json();
+
+  messages = [];
+
+  data.forEach(msg => {
+    messages.push({ role: msg.role, content: msg.content });
+    addMessage(msg.content, msg.role === "user" ? "user" : "ai");
+  });
+}
+
+// switch chat
+function switchChat(id) {
+  chatId = id;
+  messages = [];
+  loadHistory();
+}
+
+// send
+async function send() {
+  const inputEl = document.getElementById("input");
+  const model = document.getElementById("model").value;
+  document.getElementById("modelLabel").innerText = model;
+
+  const input = inputEl.value.trim();
+  if (!input) return;
+
+  messages.push({ role: "user", content: input });
+  addMessage(input, "user");
+
+  const response = await fetch("/chat", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      messages,
+      model,
+      chatId
+    })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  let aiText = "";
+  const chat = document.getElementById("chat");
+  const aiDiv = document.createElement("div");
+  aiDiv.className = "msg ai";
+  chat.appendChild(aiDiv);
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    aiText += decoder.decode(value);
+    aiDiv.innerHTML = marked.parse(aiText);
+  }
+
+  messages.push({ role: "assistant", content: aiText });
+  inputEl.value = "";
+}
+
+// enter key
+function handleKey(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+}
+
+// init
+loadHistory();
+</script>
+
+</body>
+</html>
