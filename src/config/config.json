@@ -1,0 +1,10 @@
+{
+  "defaultModel": "openai/gpt-4o-mini",
+  "models": [
+    "openai/gpt-4o-mini",
+    "anthropic/claude-3-haiku",
+    "meta-llama/llama-3-8b-instruct",
+    "minimax/minimax-m2.5:free"
+  ],
+  "maxHistory": 20
+}
